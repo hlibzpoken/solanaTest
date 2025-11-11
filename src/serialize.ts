@@ -562,6 +562,7 @@ export class SealevelHyperlaneTokenData {
   export interface TransferRemoteParams extends TransferParams {
     destination: Domain;
     customHook?: Address;
+    isNative: boolean
   }
   export interface Quote {
     addressOrDenom?: string; // undefined values represent default native tokens

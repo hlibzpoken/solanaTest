@@ -6,6 +6,8 @@ import {
     Message,
     PublicKey,
     SystemProgram,
+    SYSVAR_CLOCK_PUBKEY,
+    SYSVAR_RENT_PUBKEY,
     Transaction,
     TransactionInstruction,
     VersionedTransaction,
@@ -74,6 +76,7 @@ interface QuoteTransferRemoteParams {
     mailbox: PublicKey;
     randomWallet: PublicKey;
     igp?: IgpPaymentKeys;
+    isNative?: boolean
   }
 
 
@@ -102,7 +105,7 @@ export abstract class Runner {
         sender,
       }: QuoteTransferRemoteParams): Promise<InterchainGasQuote> {
         const tokenData = await this.getTokenAccountData();
-        console.log('Available destination domains:', [...tokenData.destination_gas.keys()]);
+        console.log('Available destination domains:', [...tokenData.destination_gas!.keys()]);
         const destinationGas = tokenData.destination_gas?.get(destination);
         if (isNullish(destinationGas)) {
           return { igpQuote: { amount: 0n } };
@@ -129,6 +132,7 @@ export abstract class Runner {
         destination,
         recipient,
         fromAccountOwner,
+        isNative
       }: TransferRemoteParams): Promise<Transaction> {
         if (!fromAccountOwner)
           throw new Error('fromAccountOwner required for Sealevel');
@@ -141,7 +145,8 @@ export abstract class Runner {
           mailbox: mailboxPubKey,
           randomWallet: randomWallet.publicKey,
           igp: await this.getIgpKeys(),
-        });
+          isNative
+        });        
     
         const value = new SealevelInstructionWrapper({
           instruction: SealevelHypTokenInstruction.TransferRemote,
@@ -198,6 +203,7 @@ export abstract class Runner {
         mailbox,
         randomWallet,
         igp,
+        isNative
       }: KeyListParams): Promise<Array<AccountMeta>> {
         let keys = [
           // 0.   [executable] The system program.
@@ -280,6 +286,12 @@ export abstract class Runner {
               isWritable: true,
             },
           ];
+          if (isNative) {
+            keys.push(
+              { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, // executable
+              { pubkey: this.deriveNativeTokenCollateralAccount(), isSigner: false, isWritable: true } // writeable
+            );
+          }
         }
         return keys;
       }
@@ -402,6 +414,14 @@ export abstract class Runner {
           this.warpProgramPubKey,
         );
       }
+
+      deriveNativeTokenCollateralAccount(): PublicKey {
+        return this.derivePda(
+          ['hyperlane_token', '-', 'native_collateral'],
+          this.warpProgramPubKey,
+        );
+      }
+    
        derivePda(
         seeds: Array<string | Buffer>,
         programId: string | PublicKey,
